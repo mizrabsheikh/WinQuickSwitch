@@ -1,10 +1,7 @@
-﻿; ===========================================
-; CONFIGURATION - Change this to remap the toggle key
-; ===========================================
-TOGGLE_KEY := "``"  ; Change this to any key you want (e.g., "F1", "CapsLock", "Space", "Tab", etc.)
+#NoTrayIcon
 
 ; ===========================================
-; Virtual Desktop Toggle Script
+; Virtual Desktop Switcher (Ctrl + Win + Left/Right)
 ; ===========================================
 
 ; --- Load VirtualDesktopAccessor.dll ---
@@ -16,43 +13,37 @@ GetDesktopCountProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor,
 GetCurrentDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetCurrentDesktopNumber", "Ptr")
 GoToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
 
-; --- Function to get total number of desktops ---
+; --- Functions ---
 GetDesktopCount() {
     global GetDesktopCountProc
     return DllCall(GetDesktopCountProc, "Int")
 }
 
-; --- Function to switch to a specific desktop ---
 GoToDesktopNumber(num) {
     global GoToDesktopNumberProc
     DllCall(GoToDesktopNumberProc, "Int", num, "Int")
 }
 
-; --- Function to get the current desktop number ---
 GetCurrentDesktopNumber() {
     global GetCurrentDesktopNumberProc
     return DllCall(GetCurrentDesktopNumberProc, "Int")
 }
 
-; --- Toggle state ---
-Toggle := 1
+; ===========================================
+; Hotkeys
+; ===========================================
 
-; --- Dynamic hotkey creation ---
-Hotkey, %TOGGLE_KEY%, ToggleDesktop
-return
-
-; --- Toggle function ---
-ToggleDesktop:
+; Ctrl + Win + Right → Next desktop
+^#Right::
     current := GetCurrentDesktopNumber()
     last := GetDesktopCount() - 1
+    if (current < last)
+        GoToDesktopNumber(current + 1)
+return
 
-    if (Toggle = 1) {
-        if (current > 0)
-            GoToDesktopNumber(current - 1)
-        Toggle := 0
-    } else {
-        if (current < last)
-            GoToDesktopNumber(current + 1)
-        Toggle := 1
-    }
+; Ctrl + Win + Left → Previous desktop
+^#Left::
+    current := GetCurrentDesktopNumber()
+    if (current > 0)
+        GoToDesktopNumber(current - 1)
 return
