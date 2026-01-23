@@ -1,17 +1,18 @@
 #NoTrayIcon
 
 ; ===========================================
-; Virtual Desktop Switcher (Ctrl + Win + Left/Right)
+; Virtual Desktop Switcher and Mover
 ; ===========================================
 
-; --- Load VirtualDesktopAccessor.dll ---
-VDA_PATH := A_ScriptDir . "\VirtualDesktopAccessor.dll"
+VDA_PATH := "C:\Users\Mizrab Sheikh\Documents\AutoHotkey\VirtualDesktopAccessor.dll"
 hVirtualDesktopAccessor := DllCall("LoadLibrary", "Str", VDA_PATH, "Ptr")
 
-; --- Get function pointers from the DLL ---
+; --- Get function pointers ---
 GetDesktopCountProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetDesktopCount", "Ptr")
 GetCurrentDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetCurrentDesktopNumber", "Ptr")
 GoToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
+MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
+GetWindowDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetWindowDesktopNumber", "Ptr")
 
 ; --- Functions ---
 GetDesktopCount() {
@@ -29,9 +30,17 @@ GetCurrentDesktopNumber() {
     return DllCall(GetCurrentDesktopNumberProc, "Int")
 }
 
-; ===========================================
-; Hotkeys
-; ===========================================
+MoveWindowToDesktopNumber(hwnd, desktop_number) {
+    global MoveWindowToDesktopNumberProc
+    return DllCall(MoveWindowToDesktopNumberProc, "Ptr", hwnd, "Int", desktop_number, "Int")
+}
+
+GetWindowDesktopNumber(hwnd) {
+    global GetWindowDesktopNumberProc
+    return DllCall(GetWindowDesktopNumberProc, "Ptr", hwnd, "Int")
+}
+
+; --- Hotkeys ---
 
 ; Ctrl + Win + Right → Next desktop
 ^#Right::
@@ -47,3 +56,33 @@ return
     if (current > 0)
         GoToDesktopNumber(current - 1)
 return
+
+; Ctrl + Win + Down → Move current desktop right
+^#Down::
+    MoveCurrentDesktop(1)
+return
+
+; Ctrl + Win + Up → Move current desktop left
+^#Up::
+    MoveCurrentDesktop(-1)
+return
+
+; --- Move desktop function ---
+MoveCurrentDesktop(direction) {
+    current := GetCurrentDesktopNumber()
+    count := GetDesktopCount()
+    target := current + direction
+
+    if (target < 0 || target >= count)
+        return
+
+    ; Get all top-level windows
+    WinGet, id, List,,, Program Manager
+    Loop, %id% {
+        hwnd := id%A_Index%
+        if (GetWindowDesktopNumber(hwnd) = current)
+            MoveWindowToDesktopNumber(hwnd, target)
+    }
+    ; Switch to the moved desktop
+    GoToDesktopNumber(target)
+}
