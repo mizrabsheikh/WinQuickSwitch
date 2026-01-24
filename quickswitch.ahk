@@ -1,7 +1,7 @@
 #NoTrayIcon
 
 ; ===========================================
-; Virtual Desktop Switcher and Mover
+; Virtual Desktop Switcher and Window Mover
 ; ===========================================
 
 VDA_PATH := "C:\Users\Mizrab Sheikh\Documents\AutoHotkey\VirtualDesktopAccessor.dll"
@@ -40,7 +40,9 @@ GetWindowDesktopNumber(hwnd) {
     return DllCall(GetWindowDesktopNumberProc, "Ptr", hwnd, "Int")
 }
 
-; --- Hotkeys ---
+; ===========================================
+; Hotkeys
+; ===========================================
 
 ; Ctrl + Win + Right → Next desktop
 ^#Right::
@@ -67,7 +69,19 @@ return
     MoveCurrentDesktop(-1)
 return
 
-; --- Move desktop function ---
+; Win + Shift + Right → Move focused window to desktop on the right (and switch)
+#+Right::
+    MoveFocusedWindow(1)
+return
+
+; Win + Shift + Left → Move focused window to desktop on the left (and switch)
+#+Left::
+    MoveFocusedWindow(-1)
+return
+
+; ===========================================
+; Move current desktop (shifts all windows)
+; ===========================================
 MoveCurrentDesktop(direction) {
     current := GetCurrentDesktopNumber()
     count := GetDesktopCount()
@@ -76,13 +90,31 @@ MoveCurrentDesktop(direction) {
     if (target < 0 || target >= count)
         return
 
-    ; Get all top-level windows
     WinGet, id, List,,, Program Manager
     Loop, %id% {
         hwnd := id%A_Index%
         if (GetWindowDesktopNumber(hwnd) = current)
             MoveWindowToDesktopNumber(hwnd, target)
     }
-    ; Switch to the moved desktop
+    GoToDesktopNumber(target)
+}
+
+; ===========================================
+; Move currently focused window (and switch)
+; ===========================================
+MoveFocusedWindow(direction) {
+    hwnd := WinExist("A")
+    if !hwnd
+        return
+
+    current := GetWindowDesktopNumber(hwnd)
+    count := GetDesktopCount()
+    target := current + direction
+
+    if (target < 0 || target >= count)
+        return
+
+    MoveWindowToDesktopNumber(hwnd, target)
+    Sleep, 100  ; short delay to ensure move is registered
     GoToDesktopNumber(target)
 }
