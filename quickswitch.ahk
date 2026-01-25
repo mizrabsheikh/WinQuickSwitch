@@ -1,7 +1,7 @@
 #NoTrayIcon
 
 ; ===========================================
-; Virtual Desktop Switcher and Window Mover
+; Virtual Desktop Switcher and Window Mover (Auto-create right desktop)
 ; ===========================================
 
 VDA_PATH := "C:\Users\Mizrab Sheikh\Documents\AutoHotkey\VirtualDesktopAccessor.dll"
@@ -13,6 +13,7 @@ GetCurrentDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopA
 GoToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GoToDesktopNumber", "Ptr")
 MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
 GetWindowDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetWindowDesktopNumber", "Ptr")
+CreateDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
 
 ; --- Functions ---
 GetDesktopCount() {
@@ -38,6 +39,11 @@ MoveWindowToDesktopNumber(hwnd, desktop_number) {
 GetWindowDesktopNumber(hwnd) {
     global GetWindowDesktopNumberProc
     return DllCall(GetWindowDesktopNumberProc, "Ptr", hwnd, "Int")
+}
+
+CreateDesktop() {
+    global CreateDesktopProc
+    return DllCall(CreateDesktopProc, "Int")
 }
 
 ; ===========================================
@@ -69,12 +75,12 @@ return
     MoveCurrentDesktop(-1)
 return
 
-; Win + Shift + Right → Move focused window to desktop on the right (and switch)
+; Win + Shift + Right → Move focused window to right (create if needed)
 #+Right::
     MoveFocusedWindow(1)
 return
 
-; Win + Shift + Left → Move focused window to desktop on the left (and switch)
+; Win + Shift + Left → Move focused window to left
 #+Left::
     MoveFocusedWindow(-1)
 return
@@ -86,7 +92,6 @@ MoveCurrentDesktop(direction) {
     current := GetCurrentDesktopNumber()
     count := GetDesktopCount()
     target := current + direction
-
     if (target < 0 || target >= count)
         return
 
@@ -100,7 +105,7 @@ MoveCurrentDesktop(direction) {
 }
 
 ; ===========================================
-; Move currently focused window (and switch)
+; Move focused window (creates desktop if needed)
 ; ===========================================
 MoveFocusedWindow(direction) {
     hwnd := WinExist("A")
@@ -111,10 +116,17 @@ MoveFocusedWindow(direction) {
     count := GetDesktopCount()
     target := current + direction
 
+    ; if moving right from last desktop → create new one
+    if (target >= count && direction > 0) {
+        CreateDesktop()
+        count := GetDesktopCount()
+        target := count - 1
+    }
+
     if (target < 0 || target >= count)
         return
 
     MoveWindowToDesktopNumber(hwnd, target)
-    Sleep, 100  ; short delay to ensure move is registered
+    Sleep, 100
     GoToDesktopNumber(target)
 }
