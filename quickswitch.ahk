@@ -1,7 +1,7 @@
 #NoTrayIcon
 
 ; ===========================================
-; Virtual Desktop Switcher and Window Mover (Auto-create right desktop)
+; Virtual Desktop Switcher and Window Mover (Focus Restore + Auto-create right desktop)
 ; ===========================================
 
 VDA_PATH := "C:\Users\Mizrab Sheikh\Documents\AutoHotkey\VirtualDesktopAccessor.dll"
@@ -14,6 +14,9 @@ GoToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccesso
 MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "MoveWindowToDesktopNumber", "Ptr")
 GetWindowDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetWindowDesktopNumber", "Ptr")
 CreateDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
+
+; --- Track last active window per desktop ---
+global LastWindow := {}
 
 ; --- Functions ---
 GetDesktopCount() {
@@ -52,17 +55,12 @@ CreateDesktop() {
 
 ; Ctrl + Win + Right → Next desktop
 ^#Right::
-    current := GetCurrentDesktopNumber()
-    last := GetDesktopCount() - 1
-    if (current < last)
-        GoToDesktopNumber(current + 1)
+    SwitchDesktop(1)
 return
 
 ; Ctrl + Win + Left → Previous desktop
 ^#Left::
-    current := GetCurrentDesktopNumber()
-    if (current > 0)
-        GoToDesktopNumber(current - 1)
+    SwitchDesktop(-1)
 return
 
 ; Ctrl + Win + Down → Move current desktop right
@@ -84,6 +82,34 @@ return
 #+Left::
     MoveFocusedWindow(-1)
 return
+
+; ===========================================
+; Switch desktop and restore last focused window
+; ===========================================
+SwitchDesktop(direction) {
+    global LastWindow
+    current := GetCurrentDesktopNumber()
+    count := GetDesktopCount()
+    target := current + direction
+    if (target < 0 || target >= count)
+        return
+
+    ; Remember last active window on current desktop
+    hwnd := WinExist("A")
+    if hwnd
+        LastWindow[current] := hwnd
+
+    ; Switch desktop
+    GoToDesktopNumber(target)
+    Sleep, 80
+
+    ; Restore last active window on target desktop
+    if LastWindow.HasKey(target) {
+        targetHwnd := LastWindow[target]
+        if WinExist("ahk_id " targetHwnd)
+            WinActivate, ahk_id %targetHwnd%
+    }
+}
 
 ; ===========================================
 ; Move current desktop (shifts all windows)
@@ -129,4 +155,8 @@ MoveFocusedWindow(direction) {
     MoveWindowToDesktopNumber(hwnd, target)
     Sleep, 100
     GoToDesktopNumber(target)
+
+    ; Focus the moved window
+    if WinExist("ahk_id " hwnd)
+        WinActivate, ahk_id %hwnd%
 }
