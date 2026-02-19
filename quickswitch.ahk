@@ -1,7 +1,8 @@
 #NoTrayIcon
+#WinActivateForce ; Helps force focus when Windows is being stubborn
 
 ; ===========================================
-; Virtual Desktop Switcher and Window Mover (Focus Restore + Auto-create right desktop)
+; Virtual Desktop Switcher and Window Mover
 ; ===========================================
 
 VDA_PATH := "C:\Users\Mizrab Sheikh\Documents\AutoHotkey\VirtualDesktopAccessor.dll"
@@ -15,23 +16,31 @@ MoveWindowToDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDeskto
 GetWindowDesktopNumberProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "GetWindowDesktopNumber", "Ptr")
 CreateDesktopProc := DllCall("GetProcAddress", "Ptr", hVirtualDesktopAccessor, "AStr", "CreateDesktop", "Ptr")
 
-; --- Track last active window per desktop ---
 global LastWindow := {}
 
-; --- Functions ---
+; --- Helper Functions ---
 GetDesktopCount() {
     global GetDesktopCountProc
     return DllCall(GetDesktopCountProc, "Int")
 }
 
-GoToDesktopNumber(num) {
-    global GoToDesktopNumberProc
-    DllCall(GoToDesktopNumberProc, "Int", num, "Int")
-}
-
 GetCurrentDesktopNumber() {
     global GetCurrentDesktopNumberProc
     return DllCall(GetCurrentDesktopNumberProc, "Int")
+}
+
+; This is the "Magic" function that prevents the flashing taskbar
+PerformCleanSwitch(targetNum) {
+    global GoToDesktopNumberProc
+    
+    ; 1. Neutralize focus by targeting the Taskbar (prevents flashing)
+    ControlFocus,, ahk_class Shell_TrayWnd
+    
+    ; 2. Perform the jump
+    DllCall(GoToDesktopNumberProc, "Int", targetNum, "Int")
+    
+    ; 3. Small buffer for the Shell to update
+    Sleep, 60 
 }
 
 MoveWindowToDesktopNumber(hwnd, desktop_number) {
@@ -53,67 +62,42 @@ CreateDesktop() {
 ; Hotkeys
 ; ===========================================
 
-; Ctrl + Win + Right → Next desktop
-^#Right::
-    SwitchDesktop(1)
-return
-
-; Ctrl + Win + Left → Previous desktop
-^#Left::
-    SwitchDesktop(-1)
-return
-
-; Ctrl + Win + Down → Move current desktop right
-^#Down::
-    MoveCurrentDesktop(1)
-return
-
-; Ctrl + Win + Up → Move current desktop left
-^#Up::
-    MoveCurrentDesktop(-1)
-return
-
-; Win + Shift + Right → Move focused window to right (create if needed)
-#+Right::
-    MoveFocusedWindow(1)
-return
-
-; Win + Shift + Left → Move focused window to left
-#+Left::
-    MoveFocusedWindow(-1)
-return
+^#Right:: SwitchDesktop(1)
+^#Left:: SwitchDesktop(-1)
+^#Down:: MoveCurrentDesktop(1)
+^#Up:: MoveCurrentDesktop(-1)
+#+Right:: MoveFocusedWindow(1)
+#+Left:: MoveFocusedWindow(-1)
 
 ; ===========================================
-; Switch desktop and restore last focused window
+; Logic Blocks
 ; ===========================================
+
 SwitchDesktop(direction) {
     global LastWindow
     current := GetCurrentDesktopNumber()
     count := GetDesktopCount()
     target := current + direction
+    
     if (target < 0 || target >= count)
         return
 
-    ; Remember last active window on current desktop
-    hwnd := WinExist("A")
-    if hwnd
-        LastWindow[current] := hwnd
+    ; Store current active window
+    activeHwnd := WinExist("A")
+    if activeHwnd
+        LastWindow[current] := activeHwnd
 
-    ; Switch desktop
-    GoToDesktopNumber(target)
-    Sleep, 80
+    PerformCleanSwitch(target)
 
-    ; Restore last active window on target desktop
+    ; Restore focus on the new desktop
     if LastWindow.HasKey(target) {
-        targetHwnd := LastWindow[target]
-        if WinExist("ahk_id " targetHwnd)
-            WinActivate, ahk_id %targetHwnd%
+        tHwnd := LastWindow[target]
+        if WinExist("ahk_id " tHwnd) {
+            WinActivate, ahk_id %tHwnd%
+        }
     }
 }
 
-; ===========================================
-; Move current desktop (shifts all windows)
-; ===========================================
 MoveCurrentDesktop(direction) {
     current := GetCurrentDesktopNumber()
     count := GetDesktopCount()
@@ -121,18 +105,20 @@ MoveCurrentDesktop(direction) {
     if (target < 0 || target >= count)
         return
 
-    WinGet, id, List,,, Program Manager
-    Loop, %id% {
-        hwnd := id%A_Index%
-        if (GetWindowDesktopNumber(hwnd) = current)
-            MoveWindowToDesktopNumber(hwnd, target)
+    ; Move only visible windows to avoid moving background system processes
+    WinGet, windows, List
+    Loop, %windows% {
+        this_hwnd := windows%A_Index%
+        WinGetTitle, title, ahk_id %this_hwnd%
+        if (title = "") ; Skip windows with no title (usually background tasks)
+            continue
+            
+        if (GetWindowDesktopNumber(this_hwnd) = current)
+            MoveWindowToDesktopNumber(this_hwnd, target)
     }
-    GoToDesktopNumber(target)
+    PerformCleanSwitch(target)
 }
 
-; ===========================================
-; Move focused window (creates desktop if needed)
-; ===========================================
 MoveFocusedWindow(direction) {
     hwnd := WinExist("A")
     if !hwnd
@@ -142,21 +128,17 @@ MoveFocusedWindow(direction) {
     count := GetDesktopCount()
     target := current + direction
 
-    ; if moving right from last desktop → create new one
     if (target >= count && direction > 0) {
         CreateDesktop()
-        count := GetDesktopCount()
-        target := count - 1
+        target := GetDesktopCount() - 1
     }
 
-    if (target < 0 || target >= count)
+    if (target < 0 || target >= GetDesktopCount())
         return
 
     MoveWindowToDesktopNumber(hwnd, target)
-    Sleep, 100
-    GoToDesktopNumber(target)
-
-    ; Focus the moved window
-    if WinExist("ahk_id " hwnd)
-        WinActivate, ahk_id %hwnd%
+    PerformCleanSwitch(target)
+    
+    ; Force focus on the moved window
+    WinActivate, ahk_id %hwnd%
 }
